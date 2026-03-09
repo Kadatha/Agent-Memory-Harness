@@ -290,6 +290,15 @@ User: OBSERVATION: Paris
 Assistant: The capital of France is Paris.
 ANSWER: Paris
 
+User: Write Python code to compute 2+3 and save to result.txt, then tell me the answer.
+Assistant: I'll write and run the Python code.
+TOOL: python_exec
+PARAMS: {{"code": "result = 2 + 3\\nwith open('result.txt', 'w') as f:\\n    f.write(str(result))\\nprint(result)"}}
+
+User: OBSERVATION: 5
+Assistant: The code computed 2+3=5 and saved it to result.txt.
+ANSWER: 5
+
 ## Rules
 
 - Use ONE tool call per response. Wait for the OBSERVATION before continuing.
