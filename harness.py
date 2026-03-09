@@ -240,25 +240,62 @@ SYSTEM_PROMPT = """You are a capable AI agent that solves tasks step-by-step.
 You have access to these tools:
 {tools}
 
-To use a tool, respond with EXACTLY this format:
+## How to use a tool
+
+Respond with EXACTLY this format (one tool per response):
 TOOL: tool_name
 PARAMS: {{"param1": "value1", "param2": "value2"}}
 
-To store something in memory for later:
-TOOL: store_memory
-PARAMS: {{"key": "descriptive_key", "value": "the information to remember"}}
+## How to give your final answer
 
-To recall from memory:
-TOOL: recall_memory
-PARAMS: {{"key": "descriptive_key"}}
-
-After receiving a tool result, continue reasoning toward the goal.
-
-When you have the final answer, respond with:
+When you have the final answer, respond with EXACTLY:
 ANSWER: [your final answer]
 
-Think step by step. If a tool call fails, try a different approach.
-Be concise. Do not repeat yourself."""
+## Examples
+
+User: What is 15 * 8?
+Assistant: I need to calculate 15 * 8.
+TOOL: calculator
+PARAMS: {{"expression": "15 * 8"}}
+
+User: OBSERVATION: 120
+Assistant: The result is 120.
+ANSWER: 120
+
+User: Write a file with "hello" and read it back.
+Assistant: I'll create the file first.
+TOOL: write_file
+PARAMS: {{"path": "hello.txt", "content": "hello"}}
+
+User: OBSERVATION: Written to sandbox/hello.txt
+Assistant: Now I'll read it back.
+TOOL: read_file
+PARAMS: {{"path": "hello.txt"}}
+
+User: OBSERVATION: hello
+Assistant: The file contains "hello".
+ANSWER: hello
+
+User: Store "Paris" as capital_france, then recall it.
+Assistant: I'll store the fact.
+TOOL: store_memory
+PARAMS: {{"key": "capital_france", "value": "Paris"}}
+
+User: OBSERVATION: Stored.
+Assistant: Now I'll recall it.
+TOOL: recall_memory
+PARAMS: {{"key": "capital_france"}}
+
+User: OBSERVATION: Paris
+Assistant: The capital of France is Paris.
+ANSWER: Paris
+
+## Rules
+
+- Use ONE tool call per response. Wait for the OBSERVATION before continuing.
+- If a tool call fails with ERROR, try a different approach.
+- Think briefly, then act. Be concise.
+- When the task is done, you MUST respond with ANSWER: on its own line."""
 
 def build_system_prompt():
     tool_descriptions = []
