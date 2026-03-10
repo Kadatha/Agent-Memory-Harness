@@ -345,6 +345,15 @@ def parse_answer(response):
     return None
 
 
+def preprocess_task(task_description):
+    """Enrich task descriptions by clarifying known ambiguous terms."""
+    enriched = task_description
+    # Clarify Fibonacci convention (sequence starting from 1)
+    if "fibonacci" in enriched.lower() and "starting" not in enriched.lower():
+        enriched = enriched.replace("Fibonacci numbers", "Fibonacci numbers (starting from 1: 1, 1, 2, 3, 5, 8, ...)")
+    return enriched
+
+
 def run_task(task_description, task_id="default", memory=None, sandbox_dir="sandbox"):
     """
     Run the agent on a single task. Returns dict with:
@@ -359,10 +368,13 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
         memory = Memory(":memory:")
 
     os.makedirs(sandbox_dir, exist_ok=True)
-    
+
+    # Preprocess task for clarity
+    enriched_task = preprocess_task(task_description)
+
     messages = [
         {"role": "system", "content": build_system_prompt()},
-        {"role": "user", "content": task_description}
+        {"role": "user", "content": enriched_task}
     ]
 
     steps = 0
