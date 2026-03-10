@@ -420,9 +420,13 @@ def parse_tool_call(response):
 
 def parse_answer(response):
     """Extract final answer from agent response."""
+    import re
     for line in response.strip().split("\n"):
         if line.startswith("ANSWER:"):
-            return line.split("ANSWER:", 1)[1].strip()
+            answer = line.split("ANSWER:", 1)[1].strip()
+            # Strip commas from numbers (e.g., "255,000" → "255000")
+            answer = re.sub(r'(\d),(\d)', r'\1\2', answer)
+            return answer
     return None
 
 
