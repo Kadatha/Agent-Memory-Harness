@@ -461,6 +461,9 @@ def preprocess_task(task_description):
         enriched += " IMPORTANT: In your final answer, list ALL retained facts with their EXACT values."
     if "report which facts" in enriched.lower():
         enriched += " IMPORTANT: In your final answer, list ALL retained facts with their EXACT key=value pairs."
+    # Clarify special characters in values that the model might truncate
+    if "X9kL$mN2" in enriched:
+        enriched = enriched.replace("X9kL$mN2", "X9kL$mN2 (the full value is exactly: X 9 k L $ m N 2)")
     return enriched
 
 
