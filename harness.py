@@ -361,7 +361,7 @@ ANSWER: 5
 
 ## Rules
 
-- Use ONE tool call per response. Wait for the OBSERVATION before continuing.
+- You may use multiple tool calls per response for independent operations (e.g., storing multiple facts).
 - If a tool call fails with ERROR, try a different approach.
 - Think briefly, then act. Be concise.
 - When the task is done, you MUST respond with ANSWER: on its own line."""
@@ -378,23 +378,33 @@ def build_system_prompt():
 # Agent Loop (ReAct-style: Reason → Act → Observe → Repeat)
 # ---------------------------------------------------------------------------
 
-def parse_tool_call(response):
-    """Extract tool name and params from agent response."""
+def parse_tool_calls(response):
+    """Extract all tool calls from agent response. Returns list of (name, params) tuples."""
     lines = response.strip().split("\n")
-    tool_name = None
-    params = {}
+    calls = []
+    current_tool = None
 
-    for i, line in enumerate(lines):
+    for line in lines:
         if line.startswith("TOOL:"):
-            tool_name = line.split("TOOL:", 1)[1].strip()
-        elif line.startswith("PARAMS:"):
+            current_tool = line.split("TOOL:", 1)[1].strip()
+        elif line.startswith("PARAMS:") and current_tool:
             params_str = line.split("PARAMS:", 1)[1].strip()
             try:
                 params = json.loads(params_str)
             except json.JSONDecodeError:
                 params = {}
+            calls.append((current_tool, params))
+            current_tool = None
 
-    return tool_name, params
+    return calls
+
+
+def parse_tool_call(response):
+    """Extract first tool name and params from agent response."""
+    calls = parse_tool_calls(response)
+    if calls:
+        return calls[0][0], calls[0][1]
+    return None, {}
 
 
 def parse_answer(response):
@@ -473,29 +483,32 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
                 "history": messages
             }
 
-        # Check for tool call
-        tool_name, params = parse_tool_call(response)
-        if tool_name:
-            # Detect repeated tool calls to break loops
-            current_call = (tool_name, json.dumps(params, sort_keys=True))
-            if current_call == last_tool_call:
-                messages.append({"role": "user", "content": "You already made this exact tool call. Try a different approach or provide your ANSWER."})
-                last_tool_call = None
-                continue
-            last_tool_call = current_call
-            result = execute_tool(tool_name, params, memory=memory, sandbox_dir=sandbox_dir)
-            
-            is_error = result.startswith("ERROR:")
-            if is_error:
-                errors += 1
-                if not last_was_error:
-                    last_was_error = True
-            else:
-                if last_was_error:
-                    error_recoveries += 1
-                    last_was_error = False
+        # Check for tool calls (supports multiple per response)
+        tool_calls = parse_tool_calls(response)
+        if tool_calls:
+            observations = []
+            for tool_name, params in tool_calls:
+                # Detect repeated tool calls to break loops
+                current_call = (tool_name, json.dumps(params, sort_keys=True))
+                if current_call == last_tool_call:
+                    observations.append(f"[{tool_name}] Already called with same params. Try a different approach.")
+                    last_tool_call = None
+                    continue
+                last_tool_call = current_call
+                result = execute_tool(tool_name, params, memory=memory, sandbox_dir=sandbox_dir)
 
-            observation = f"OBSERVATION: {result}"
+                is_error = result.startswith("ERROR:")
+                if is_error:
+                    errors += 1
+                    if not last_was_error:
+                        last_was_error = True
+                else:
+                    if last_was_error:
+                        error_recoveries += 1
+                        last_was_error = False
+                observations.append(f"[{tool_name}] {result}" if len(tool_calls) > 1 else result)
+
+            observation = f"OBSERVATION: " + ("\n".join(observations) if len(observations) > 1 else observations[0])
             messages.append({"role": "user", "content": observation})
             memory.add_episode(task_id, step, "observation", observation)
         else:
