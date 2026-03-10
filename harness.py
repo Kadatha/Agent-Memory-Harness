@@ -141,7 +141,7 @@ def execute_tool(tool_name, params, memory=None, sandbox_dir="sandbox"):
             with open(script_path, "w") as f:
                 f.write(params.get("code", ""))
             result = subprocess.run(
-                ["python", script_path],
+                ["python", "_exec.py"],
                 capture_output=True, text=True, timeout=30,
                 cwd=sandbox_dir
             )
