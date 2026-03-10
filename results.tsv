@@ -1,1 +1,45 @@
 commit	composite_score	status	description
+fb331e4	0.7064	baseline	baseline: 12/16 correct, 239 steps, 31 errors, 18 recoveries
+08f7be0	0.8640	keep	few-shot examples for tool-call formatting: 14/16, 144 steps, 16 errors, 14 recoveries
+-	0.8598	discard	planning prompt added to task: worse step efficiency, no improvement
+-	0.8231	discard	better error/nudge messages: hurt recovery rate
+-	0.8408	discard	temperature 0.4: code_02 looped, worse recovery
+3518852	0.8873	keep	python code few-shot example: 15/16, 141 steps, 5 errors, 4 recoveries
+-	0.7718	discard	MAX_STEPS=30: tasks hit limit, lost 2 correct answers
+-	0.8065	discard	robust JSON parser: worse overall, stochastic variance
+-	0.8134	discard	print() and ANSWER rules: more failures, stochastic
+-	0.7580	discard	temperature 0.5: high variance, 4 failures, worse overall
+-	<0.50	discard	repetition_penalty 1.3: math_01 hit 50 steps, aborted
+-	0.8220	discard	loop detection mechanism: added overhead, worse step efficiency
+-	0.8310	discard	extra multi-step code example: added prompt length, worse
+0.8864	-	variance check re-run: confirms 0.886-0.887 range for best config
+-	0.7177	discard	context window truncation: loses task info, much worse
+-	0.8343	discard	error recovery few-shot example: plan_01 regressed, longer prompt hurts
+-	0.8454	discard	/no_think: plan_01 hit 50 steps, worse without thinking
+-	0.7910	discard	compact non-conversational examples: model needs User/Assistant format
+-	0.7265	discard	top_p 0.95: too random, 5 failures
+-	0.8330	discard	enhanced calculator functions: no impact on bottleneck, file_01 variance
+-	0.7954	discard	robust multi-line PARAMS parser: greedy regex caused cascading failures
+-	0.7934	discard	failed PARAMS recovery with regex: worse, file_01 38 steps, code_03 50 steps
+-	0.8532	discard	answer self-verification step: added steps without fixing code_01
+-	0.7973	discard	temperature annealing: low temp at later steps too rigid for recovery
+-	0.7923	discard	truncate observations to 500 chars: lost useful info
+-	0.7910	discard	deterministic seed=42: bad seed, 4 failures
+a311966	0.8994	keep	minimal loop breaker: 15/16, 101-119 steps, prevents 50-step loops
+-	0.9167	discard	qwen2.5:14b model: more errors (7 vs 1), worse recovery rate
+-	0.8441	discard	Fibonacci hint in system prompt: disrupted prompt, memory_02 regressed
+-	0.8972	discard	directive nudge message: premature answers, recovery rate dropped
+-	0.7910	discard	qwen2.5:7b model: same Fibonacci issue, worse overall
+403d04d	0.9497	keep	fix python_exec path doubling bug: 51 steps, 100% recovery, 93.6% efficiency
+bf0f785	0.9850	keep	task preprocessor for Fibonacci: 16/16 correct, 60 steps, 100% recovery
+-	0.9822	discard	multi-tool execution: no improvement, model rarely uses multiple tools
+-	0.9835	discard	focused nudge message: within variance, no meaningful gain
+-	0.9855	-	variance check: confirms 0.917-0.986 range, avg ~0.96
+--- Phase 3: Hard Mode (25 benchmarks, 11 categories) ---
+-	0.9325	baseline	Phase 3 baseline: 21/23 correct, 88 steps, 1 error, 1 recovery. Failures: long_01 (wrong expected=153, correct=160), edge_03 (stochastic)
+-	0.9292	discard	Exp 33: task preprocessor for long chains: same failures, ambig_03 exploded to 22 steps
+-	0.9058	variance	Phase 3 variance run: 22/23 (edge_03 passed), but 104 steps, 4 errors, 75% recovery. Range 0.905-0.933
+-	0.9562/0.9207	discard	Exp 34: verification nudge on all observations: high variance, long_03 hit 50 steps on run 2
+-	0.8880	discard	Exp 35: error-only nudge: much worse, multi_file_02 hit 50 steps, 194 total steps
+-	0.8911	discard	Exp 36: context compression at 16 msgs: good steps (93) but recovery dropped to 66%
+-	0.9019	discard	Exp 37: step budget pressure at step 15: long_02 failed, premature answer

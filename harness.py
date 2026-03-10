@@ -119,7 +119,7 @@ TOOLS = {
         "parameters": {"path": "string"}
     },
     "calculator": {
-        "description": "Evaluate a mathematical expression.",
+        "description": "Evaluate a math expression. Supports +,-,*,/,**,round(),abs(),math.factorial(),math.sqrt(), etc.",
         "parameters": {"expression": "string"}
     },
     "store_memory": {
@@ -169,12 +169,15 @@ def execute_tool(tool_name, params, memory=None, sandbox_dir="sandbox"):
 
         elif tool_name == "calculator":
             expr = params.get("expression", "")
-            # Safe eval: only allow math operations
-            allowed = set("0123456789+-*/.() ")
-            if all(c in allowed for c in expr):
-                return str(eval(expr))
-            else:
-                return "ERROR: Invalid expression (only numbers and +-*/ allowed)"
+            import math
+            # Safe eval: allow math operations and common functions
+            safe_dict = {"__builtins__": {}, "abs": abs, "round": round, "min": min, "max": max,
+                         "int": int, "float": float, "pow": pow, "sum": sum,
+                         "math": math}
+            try:
+                return str(eval(expr, safe_dict))
+            except Exception as e:
+                return f"ERROR: {e}"
 
         elif tool_name == "store_memory":
             if memory:

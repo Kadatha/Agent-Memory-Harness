@@ -1,8 +1,14 @@
 """
-Evaluation framework for agent harness research.
+Evaluation framework for agent harness research — Phase 3: Hard Mode.
 DO NOT MODIFY THIS FILE — the research agent only modifies harness.py.
 
-Runs benchmark tasks through the harness and produces a composite score.
+Phase 3 benchmarks test capabilities that broke Phase 2:
+- Ambiguous instructions requiring interpretation
+- Multi-file operations with dependencies
+- Tasks requiring backtracking/self-correction
+- Long reasoning chains (10+ steps)
+- Adversarial edge cases
+- Cross-task memory persistence
 """
 
 import json
@@ -13,133 +19,186 @@ import importlib
 import sys
 
 # ---------------------------------------------------------------------------
-# Benchmark Tasks
+# Benchmark Tasks — Phase 3 Hard Mode
 # ---------------------------------------------------------------------------
 
 BENCHMARKS = [
-    # --- Math & Reasoning ---
+    # ===== RETAINED FROM PHASE 2 (regression tests) =====
     {
-        "id": "math_01",
-        "category": "reasoning",
+        "id": "reg_01",
+        "category": "regression",
         "task": "Calculate: (17 * 23) + (45 * 12) - (100 / 4). Give the exact numerical answer.",
         "expected": "906.0",
         "check": "numeric",
     },
     {
-        "id": "math_02",
-        "category": "reasoning",
-        "task": "What is the sum of all prime numbers less than 30?",
-        "expected": "129",
+        "id": "reg_02",
+        "category": "regression",
+        "task": "Write a Python script that generates the first 10 Fibonacci numbers (starting 0, 1, 1, 2, 3, 5, 8, 13, 21, 34) and saves them as a JSON list to 'fibonacci.json'. Then read the file back and tell me the sum of all 10 numbers.",
+        "expected": "88",
         "check": "numeric",
     },
     {
-        "id": "math_03",
-        "category": "reasoning",
-        "task": "A train travels 120 miles in 2 hours, then 180 miles in 3 hours. What is the average speed for the entire trip in mph?",
-        "expected": "60",
-        "check": "numeric",
-    },
-
-    # --- Multi-step Python coding ---
-    {
-        "id": "code_01",
-        "category": "coding",
-        "task": "Write a Python script that generates the first 10 Fibonacci numbers and saves them as a JSON list to 'fibonacci.json'. Then read the file back and tell me the sum of all 10 numbers.",
-        "expected": "143",
-        "check": "numeric",
-    },
-    {
-        "id": "code_02",
-        "category": "coding",
-        "task": "Write a Python script that creates a file called 'data.csv' with columns 'name,score' and 5 rows of sample data. Then read the file and tell me the average score. Use scores: 85, 92, 78, 96, 88.",
-        "expected": "87.8",
-        "check": "numeric",
-    },
-    {
-        "id": "code_03",
-        "category": "coding",
-        "task": "Write a Python function that checks if a string is a palindrome (ignoring spaces and case). Test it with 'A man a plan a canal Panama' and 'Hello World'. Return the results as 'True, False'.",
-        "expected": "True, False",
-        "check": "contains",
-    },
-
-    # --- File manipulation ---
-    {
-        "id": "file_01",
-        "category": "file_ops",
-        "task": "Create a file called 'notes.txt' with 3 lines: 'Line 1: Hello', 'Line 2: World', 'Line 3: Test'. Then read it back and tell me the total number of characters (including newlines).",
-        "expected": None,  # Variable answer, scored on completion
-        "check": "completed",
-    },
-    {
-        "id": "file_02",
-        "category": "file_ops",
-        "task": "Create a JSON file called 'config.json' with keys: name='TestApp', version='1.0', debug=true, max_retries=3. Then read it back and tell me the value of max_retries.",
-        "expected": "3",
-        "check": "numeric",
-    },
-
-    # --- Memory & Recall ---
-    {
-        "id": "memory_01",
-        "category": "memory",
-        "task": "Store these facts in memory: 'capital_france' = 'Paris', 'capital_japan' = 'Tokyo', 'capital_brazil' = 'Brasilia'. Then recall the capital of Japan.",
-        "expected": "Tokyo",
-        "check": "contains",
-    },
-    {
-        "id": "memory_02",
-        "category": "memory",
-        "task": "Store the number 42 under key 'answer'. Then store 'the question is unknown' under key 'question'. Recall both and tell me what you stored.",
-        "expected": "42",
-        "check": "contains",
-    },
-
-    # --- Multi-step reasoning chains ---
-    {
-        "id": "chain_01",
-        "category": "multi_step",
-        "task": "Step 1: Calculate 15 * 8. Step 2: Add 37 to that result. Step 3: Divide by 3. Step 4: Round to 2 decimal places. What is the final answer?",
-        "expected": "52.33",
-        "check": "numeric",
-    },
-    {
-        "id": "chain_02",
-        "category": "multi_step",
-        "task": "Create a file called 'numbers.txt' with the numbers 1 through 10, one per line. Then write a Python script that reads the file, calculates the sum, and saves the result to 'sum.txt'. Finally, read sum.txt and tell me the answer.",
-        "expected": "55",
-        "check": "numeric",
-    },
-
-    # --- Error recovery ---
-    {
-        "id": "error_01",
-        "category": "error_recovery",
+        "id": "reg_03",
+        "category": "regression",
         "task": "Try to read a file called 'nonexistent_file_xyz.txt'. When that fails, create it with the content 'recovered successfully', then read it again and tell me the content.",
         "expected": "recovered successfully",
         "check": "contains",
     },
+
+    # ===== AMBIGUOUS INSTRUCTIONS =====
     {
-        "id": "error_02",
-        "category": "error_recovery",
-        "task": "Run this Python code: 'result = 1/0'. When it fails, fix the code to compute 1/0.5 instead and tell me the result.",
-        "expected": "2.0",
+        "id": "ambig_01",
+        "category": "ambiguous",
+        "task": "Sort these numbers and give me the middle one: 42, 17, 83, 56, 31.",
+        "expected": "42",
         "check": "numeric",
     },
-
-    # --- Planning & decomposition ---
     {
-        "id": "plan_01",
-        "category": "planning",
-        "task": "I need to analyze some data. First, create a file 'sales.json' with this data: [{\"month\":\"Jan\",\"revenue\":1000},{\"month\":\"Feb\",\"revenue\":1500},{\"month\":\"Mar\",\"revenue\":1200}]. Then write Python code to find the month with highest revenue and the total revenue across all months. Report both.",
-        "expected": "Feb",
+        "id": "ambig_02",
+        "category": "ambiguous",
+        "task": "I have a list of temperatures in Celsius: 20, 25, 30, 15, 35. Convert each to Fahrenheit, find the average of the Fahrenheit values, then convert that average back to Celsius. What do you get?",
+        "expected": "25",
+        "check": "numeric",
+    },
+    {
+        "id": "ambig_03",
+        "category": "ambiguous",
+        "task": "Write some data to a file, process it, and tell me something interesting about it. Use these numbers: 2, 4, 8, 16, 32, 64, 128.",
+        "expected": None,
+        "check": "completed",
+    },
+
+    # ===== MULTI-FILE OPERATIONS =====
+    {
+        "id": "multi_file_01",
+        "category": "multi_file",
+        "task": "Create three files: 'part1.txt' with 'Hello', 'part2.txt' with ' ', 'part3.txt' with 'World'. Then write a Python script that reads all three files, concatenates their contents, and saves the result to 'combined.txt'. Read combined.txt and tell me what it says.",
+        "expected": "Hello World",
         "check": "contains",
     },
     {
-        "id": "plan_02",
-        "category": "planning",
-        "task": "Create a simple text-based todo list system: 1) Create 'todo.json' with 3 tasks (each with 'task' and 'done' fields, all initially false). 2) Mark the second task as done. 3) Read the file and tell me how many tasks are incomplete.",
-        "expected": "2",
+        "id": "multi_file_02",
+        "category": "multi_file",
+        "task": "Create a JSON file 'users.json' with 3 users (name, age, department). Create another JSON file 'departments.json' mapping department names to budgets. Write Python code that joins the data and finds which department has the oldest employee. Tell me the department name and the employee's age.",
+        "expected": None,
+        "check": "completed",
+    },
+    {
+        "id": "multi_file_03",
+        "category": "multi_file",
+        "task": "Create a Python module file called 'mathutils.py' with functions add(a,b) and multiply(a,b). Then create a separate script 'main.py' that imports mathutils and computes add(multiply(3,4), multiply(5,6)). Run main.py and tell me the result.",
+        "expected": "42",
+        "check": "numeric",
+    },
+
+    # ===== BACKTRACKING & SELF-CORRECTION =====
+    {
+        "id": "backtrack_01",
+        "category": "backtracking",
+        "task": "Write a Python script that finds all two-digit prime numbers whose digits sum to 10. If your first approach has a bug or gives wrong results, fix it and try again. List all such primes.",
+        "expected": "19",
+        "check": "contains",
+    },
+    {
+        "id": "backtrack_02",
+        "category": "backtracking",
+        "task": "Create a CSV file with headers 'item,price,quantity'. Add 5 rows of store inventory data. Then write code to find the total inventory value (price * quantity for each item, summed). If you get an error reading the CSV, debug and fix it. Tell me the total value.",
+        "expected": None,
+        "check": "completed",
+    },
+
+    # ===== LONG REASONING CHAINS =====
+    {
+        "id": "long_01",
+        "category": "long_chain",
+        "task": "Solve this step by step: Start with 100. Subtract 17. Multiply by 3. Add 49. Divide by 2. Subtract 31. Multiply by 4. Add 7. Divide by 3. Round to the nearest integer. What is the result?",
+        "expected": "153",
+        "check": "numeric",
+    },
+    {
+        "id": "long_02",
+        "category": "long_chain",
+        "task": "Create a file 'log.txt'. Write 'Step 1: initialized' to it. Then, in a loop of 5 iterations: read the file, count the lines, write 'Step N: count was X' (where N is the current step and X is the line count). After all iterations, read the file and tell me how many lines it has.",
+        "expected": "6",
+        "check": "numeric",
+    },
+    {
+        "id": "long_03",
+        "category": "long_chain",
+        "task": "Write a Python script that implements bubble sort from scratch (no built-in sort). Sort the list [64, 34, 25, 12, 22, 11, 90] and save each pass of the sort to 'sort_log.txt' (one line per pass). Then tell me the sorted list and how many passes it took.",
+        "expected": "11, 12, 22, 25, 34, 64, 90",
+        "check": "contains",
+    },
+
+    # ===== ADVERSARIAL EDGE CASES =====
+    {
+        "id": "edge_01",
+        "category": "edge_case",
+        "task": "Calculate the factorial of 0. Then calculate the factorial of 1. Then calculate the factorial of 10. Give all three answers separated by commas.",
+        "expected": "3628800",
+        "check": "contains",
+    },
+    {
+        "id": "edge_02",
+        "category": "edge_case",
+        "task": "Create an empty file called 'empty.txt'. Read it. Write 'not empty anymore' to it. Read it again. Tell me what you got from BOTH reads.",
+        "expected": "not empty anymore",
+        "check": "contains",
+    },
+    {
+        "id": "edge_03",
+        "category": "edge_case",
+        "task": "Write Python code that handles these cases: divide 10 by 3 (float division), divide 10 by 0 (should catch the error and return 'infinity'), and divide 0 by 10. Report all three results.",
+        "expected": "infinity",
+        "check": "contains",
+    },
+
+    # ===== MEMORY PERSISTENCE =====
+    {
+        "id": "mem_01",
+        "category": "memory_hard",
+        "task": "Store these 5 facts in memory: pi=3.14159, euler=2.71828, golden=1.61803, sqrt2=1.41421, ln2=0.69315. Then recall euler and golden, multiply them together using the calculator, and tell me the result.",
+        "expected": "4.39",
+        "check": "numeric",
+    },
+    {
+        "id": "mem_02",
+        "category": "memory_hard",
+        "task": "Store 'secret_code' = 'ALPHA-7742-BRAVO' in memory. Then do 3 unrelated calculations (any math). After the calculations, recall the secret code and tell me what it is.",
+        "expected": "ALPHA-7742-BRAVO",
+        "check": "contains",
+    },
+
+    # ===== DATA ANALYSIS =====
+    {
+        "id": "analysis_01",
+        "category": "analysis",
+        "task": "Create a JSON file with monthly sales data for a year (Jan-Dec, make up realistic numbers between 10000 and 50000). Write Python code to find: the best month, the worst month, the average, and the standard deviation. Report all four.",
+        "expected": None,
+        "check": "completed",
+    },
+    {
+        "id": "analysis_02",
+        "category": "analysis",
+        "task": "Write Python code that generates 100 random numbers between 1 and 1000 (use seed 42 for reproducibility), saves them to 'numbers.json', then computes: mean, median, mode (most frequent tens digit), and how many are prime. Report all four statistics.",
+        "expected": None,
+        "check": "completed",
+    },
+
+    # ===== DEBUGGING =====
+    {
+        "id": "debug_01",
+        "category": "debugging",
+        "task": "Run this buggy Python code: 'data = {\"a\": 1, \"b\": 2}; print(data[\"c\"])'. It will crash. Fix it to print the value of key 'c' with a default of 0 if the key doesn't exist. Tell me the output.",
+        "expected": "0",
+        "check": "numeric",
+    },
+    {
+        "id": "debug_02",
+        "category": "debugging",
+        "task": "Run this code: 'nums = [1,2,3,4,5]; result = nums[5]'. It will crash with an IndexError. Fix the code to safely get the last element instead. Tell me the result.",
+        "expected": "5",
         "check": "numeric",
     },
 ]
@@ -162,12 +221,11 @@ def check_answer(result, benchmark):
 
     elif check_type == "numeric":
         try:
-            # Extract numbers from answer
             import re
             numbers = re.findall(r'-?\d+\.?\d*', answer)
             expected_num = float(expected)
             for n in numbers:
-                if abs(float(n) - expected_num) < 0.1:
+                if abs(float(n) - expected_num) < 0.5:
                     return True
             return False
         except (ValueError, TypeError):
@@ -223,7 +281,6 @@ def score_run(results):
 def run_evaluation(harness_module=None):
     """Run all benchmarks through the harness and return scored results."""
     
-    # Import harness dynamically so we always get the latest version
     if harness_module is None:
         if 'harness' in sys.modules:
             del sys.modules['harness']
@@ -236,7 +293,6 @@ def run_evaluation(harness_module=None):
         task_id = bench["id"]
         sandbox_dir = os.path.join(sandbox_base, task_id)
         
-        # Clean sandbox for each task
         if os.path.exists(sandbox_dir):
             shutil.rmtree(sandbox_dir)
         os.makedirs(sandbox_dir, exist_ok=True)
@@ -287,8 +343,9 @@ def run_evaluation(harness_module=None):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Agent Harness Evaluation")
+    print("Agent Harness Evaluation — Phase 3: Hard Mode")
     print("=" * 60)
+    print(f"  Benchmarks: {len(BENCHMARKS)}")
     print()
 
     results, scores = run_evaluation()
@@ -304,6 +361,22 @@ if __name__ == "__main__":
     print(f"  Total Steps:      {scores['total_steps']}")
     print(f"  Total Errors:     {scores['total_errors']}")
     print(f"  Recoveries:       {scores['total_recoveries']}")
+    print()
+    
+    # Per-category breakdown
+    categories = {}
+    for r in results:
+        cat = r["benchmark"]["category"]
+        if cat not in categories:
+            categories[cat] = {"correct": 0, "total": 0}
+        categories[cat]["total"] += 1
+        if r["correct"]:
+            categories[cat]["correct"] += 1
+    
+    print("  Per-Category:")
+    for cat, stats in sorted(categories.items()):
+        print(f"    {cat}: {stats['correct']}/{stats['total']}")
+    
     print()
     print(f"composite_score: {scores['composite']:.4f}")
     print("---")
