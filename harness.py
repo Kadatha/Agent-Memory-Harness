@@ -369,6 +369,7 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
     errors = 0
     error_recoveries = 0
     last_was_error = False
+    last_tool_call = None
 
     for step in range(MAX_STEPS):
         steps += 1
@@ -403,6 +404,13 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
         # Check for tool call
         tool_name, params = parse_tool_call(response)
         if tool_name:
+            # Detect repeated tool calls to break loops
+            current_call = (tool_name, json.dumps(params, sort_keys=True))
+            if current_call == last_tool_call:
+                messages.append({"role": "user", "content": "You already made this exact tool call. Try a different approach or provide your ANSWER."})
+                last_tool_call = None
+                continue
+            last_tool_call = current_call
             result = execute_tool(tool_name, params, memory=memory, sandbox_dir=sandbox_dir)
             
             is_error = result.startswith("ERROR:")
