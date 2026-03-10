@@ -292,9 +292,9 @@ SYSTEM_PROMPT = """You are a capable AI agent that solves tasks step-by-step.
 You have access to these tools:
 {tools}
 
-## How to use a tool
+## How to use tools
 
-Respond with EXACTLY this format (one tool per response):
+To call one or more tools, use this format (you may include multiple TOOL/PARAMS pairs):
 TOOL: tool_name
 PARAMS: {{"param1": "value1", "param2": "value2"}}
 
@@ -343,21 +343,19 @@ Assistant: The capital of France is Paris.
 ANSWER: Paris
 
 User: Store a critical password "abc123" and a trivial note "nice weather". Then recall only important facts.
-Assistant: I'll store the critical password with high confidence.
+Assistant: I'll store both facts at once with appropriate confidence levels.
 TOOL: store_memory
 PARAMS: {{"key": "password", "value": "abc123", "confidence": 1.0, "category": "critical"}}
-
-User: OBSERVATION: Stored (confidence: 1.0).
-Assistant: Now I'll store the trivial note with low confidence.
 TOOL: store_memory
 PARAMS: {{"key": "weather_note", "value": "nice weather", "confidence": 0.3, "category": "trivial"}}
 
-User: OBSERVATION: Stored (confidence: 0.3).
+User: OBSERVATION: [store_memory] Stored (confidence: 1.0).
+[store_memory] Stored (confidence: 0.3).
 Assistant: Now I'll recall only high-confidence facts.
 TOOL: recall_all_memory
 PARAMS: {{"min_confidence": 0.8}}
 
-User: OBSERVATION: {{"password": "abc123 (confidence: 1.0)"}}
+User: OBSERVATION: {{"password": {{"value": "abc123", "confidence": 1.0}}}}
 Assistant: The only high-confidence fact is the password: abc123. The trivial weather note was filtered out.
 ANSWER: password: abc123
 
