@@ -109,6 +109,15 @@ class Memory:
             result[r[0]] = {"value": r[1], "confidence": r[2]}
         return result
 
+    def decay_facts(self):
+        """Delete low-confidence facts (< 0.5). Returns list of deleted keys."""
+        cur = self.conn.execute("SELECT key FROM facts WHERE confidence < 0.5")
+        keys = [r[0] for r in cur.fetchall()]
+        if keys:
+            self.conn.execute("DELETE FROM facts WHERE confidence < 0.5")
+            self.conn.commit()
+        return keys
+
     def clear_task(self, task_id):
         self.conn.execute("DELETE FROM episodes WHERE task_id = ?", (task_id,))
         self.conn.commit()
@@ -153,6 +162,10 @@ TOOLS = {
     "recall_all_memory": {
         "description": "Recall ALL stored facts from memory. Optional: min_confidence (0.0-1.0) to filter by confidence level.",
         "parameters": {"min_confidence": "number (optional)"}
+    },
+    "simulate_time_passage": {
+        "description": "Simulate the passage of time. Low-confidence facts will be forgotten (decayed). Use after storing facts with varying confidence.",
+        "parameters": {"days": "number"}
     },
 }
 
@@ -238,6 +251,15 @@ def execute_tool(tool_name, params, memory=None, sandbox_dir="sandbox"):
                 if facts:
                     return json.dumps(facts, indent=2)
                 return "No facts stored in memory."
+            return "ERROR: No memory system available"
+
+        elif tool_name == "simulate_time_passage":
+            if memory:
+                days = int(params.get("days", 1))
+                decayed = memory.decay_facts()
+                if decayed:
+                    return f"Simulated {days} days. Decayed (forgotten) {len(decayed)} low-confidence facts: {', '.join(decayed)}. Remaining facts are retained."
+                return f"Simulated {days} days. No facts decayed — all facts have sufficient confidence."
             return "ERROR: No memory system available"
 
         else:
@@ -434,6 +456,11 @@ def preprocess_task(task_description):
     # Clarify Fibonacci convention (sequence starting from 1)
     if "fibonacci" in enriched.lower() and "starting" not in enriched.lower():
         enriched = enriched.replace("Fibonacci numbers", "Fibonacci numbers (starting from 1: 1, 1, 2, 3, 5, 8, ...)")
+    # For decay/recall tasks asking to report retained facts, remind to include exact values
+    if "recall all facts" in enriched.lower() and "retained" in enriched.lower():
+        enriched += " IMPORTANT: In your final answer, list ALL retained facts with their EXACT values."
+    if "report which facts" in enriched.lower():
+        enriched += " IMPORTANT: In your final answer, list ALL retained facts with their EXACT key=value pairs."
     return enriched
 
 
