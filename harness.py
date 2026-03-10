@@ -52,6 +52,8 @@ class Memory:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 key TEXT UNIQUE,
                 value TEXT,
+                confidence REAL DEFAULT 1.0,
+                category TEXT DEFAULT '',
                 updated REAL
             )
         """)
@@ -73,21 +75,39 @@ class Memory:
         rows.reverse()
         return [{"step": r[0], "role": r[1], "content": r[2]} for r in rows]
 
-    def store_fact(self, key, value):
+    def store_fact(self, key, value, confidence=1.0, category=""):
         self.conn.execute(
-            "INSERT OR REPLACE INTO facts (key, value, updated) VALUES (?, ?, ?)",
-            (key, value, time.time())
+            "INSERT OR REPLACE INTO facts (key, value, confidence, category, updated) VALUES (?, ?, ?, ?, ?)",
+            (key, value, confidence, category, time.time())
         )
         self.conn.commit()
 
     def recall_fact(self, key):
-        cur = self.conn.execute("SELECT value FROM facts WHERE key = ?", (key,))
+        cur = self.conn.execute("SELECT value, confidence FROM facts WHERE key = ?", (key,))
         row = cur.fetchone()
-        return row[0] if row else None
+        if row:
+            return row[0]
+        # Fuzzy match: try substring matching
+        cur = self.conn.execute("SELECT key, value, confidence FROM facts WHERE key LIKE ?", (f"%{key}%",))
+        rows = cur.fetchall()
+        if rows:
+            return f"(fuzzy match) {rows[0][0]}: {rows[0][1]}"
+        return None
 
-    def recall_all_facts(self):
-        cur = self.conn.execute("SELECT key, value FROM facts ORDER BY updated DESC LIMIT 50")
-        return {r[0]: r[1] for r in cur.fetchall()}
+    def recall_all_facts(self, min_confidence=None):
+        if min_confidence is not None:
+            cur = self.conn.execute(
+                "SELECT key, value, confidence FROM facts WHERE confidence >= ? ORDER BY updated DESC LIMIT 50",
+                (min_confidence,)
+            )
+        else:
+            cur = self.conn.execute(
+                "SELECT key, value, confidence FROM facts ORDER BY updated DESC LIMIT 50"
+            )
+        result = {}
+        for r in cur.fetchall():
+            result[r[0]] = {"value": r[1], "confidence": r[2]}
+        return result
 
     def clear_task(self, task_id):
         self.conn.execute("DELETE FROM episodes WHERE task_id = ?", (task_id,))
@@ -123,12 +143,16 @@ TOOLS = {
         "parameters": {"expression": "string"}
     },
     "store_memory": {
-        "description": "Store a key-value fact in long-term memory.",
-        "parameters": {"key": "string", "value": "string"}
+        "description": "Store a key-value fact in long-term memory. Optional: confidence (0.0-1.0, default 1.0) and category (string).",
+        "parameters": {"key": "string", "value": "string", "confidence": "number (optional)", "category": "string (optional)"}
     },
     "recall_memory": {
-        "description": "Recall a fact from long-term memory by key.",
+        "description": "Recall a fact from long-term memory by key. Supports fuzzy matching if exact key not found.",
         "parameters": {"key": "string"}
+    },
+    "recall_all_memory": {
+        "description": "Recall ALL stored facts from memory. Optional: min_confidence (0.0-1.0) to filter by confidence level.",
+        "parameters": {"min_confidence": "number (optional)"}
     },
 }
 
@@ -181,14 +205,28 @@ def execute_tool(tool_name, params, memory=None, sandbox_dir="sandbox"):
 
         elif tool_name == "store_memory":
             if memory:
-                memory.store_fact(params.get("key", ""), params.get("value", ""))
-                return "Stored."
+                confidence = float(params.get("confidence", 1.0))
+                category = params.get("category", "")
+                memory.store_fact(params.get("key", ""), params.get("value", ""),
+                                  confidence=confidence, category=category)
+                return f"Stored (confidence: {confidence})."
             return "ERROR: No memory system available"
 
         elif tool_name == "recall_memory":
             if memory:
                 val = memory.recall_fact(params.get("key", ""))
                 return val if val else "No memory found for that key."
+            return "ERROR: No memory system available"
+
+        elif tool_name == "recall_all_memory":
+            if memory:
+                min_conf = params.get("min_confidence")
+                if min_conf is not None:
+                    min_conf = float(min_conf)
+                facts = memory.recall_all_facts(min_confidence=min_conf)
+                if facts:
+                    return json.dumps(facts, indent=2)
+                return "No facts stored in memory."
             return "ERROR: No memory system available"
 
         else:
@@ -284,7 +322,7 @@ Assistant: I'll store the fact.
 TOOL: store_memory
 PARAMS: {{"key": "capital_france", "value": "Paris"}}
 
-User: OBSERVATION: Stored.
+User: OBSERVATION: Stored (confidence: 1.0).
 Assistant: Now I'll recall it.
 TOOL: recall_memory
 PARAMS: {{"key": "capital_france"}}
@@ -292,6 +330,25 @@ PARAMS: {{"key": "capital_france"}}
 User: OBSERVATION: Paris
 Assistant: The capital of France is Paris.
 ANSWER: Paris
+
+User: Store a critical password "abc123" and a trivial note "nice weather". Then recall only important facts.
+Assistant: I'll store the critical password with high confidence.
+TOOL: store_memory
+PARAMS: {{"key": "password", "value": "abc123", "confidence": 1.0, "category": "critical"}}
+
+User: OBSERVATION: Stored (confidence: 1.0).
+Assistant: Now I'll store the trivial note with low confidence.
+TOOL: store_memory
+PARAMS: {{"key": "weather_note", "value": "nice weather", "confidence": 0.3, "category": "trivial"}}
+
+User: OBSERVATION: Stored (confidence: 0.3).
+Assistant: Now I'll recall only high-confidence facts.
+TOOL: recall_all_memory
+PARAMS: {{"min_confidence": 0.8}}
+
+User: OBSERVATION: {{"password": "abc123 (confidence: 1.0)"}}
+Assistant: The only high-confidence fact is the password: abc123. The trivial weather note was filtered out.
+ANSWER: password: abc123
 
 User: Write Python code to compute 2+3 and save to result.txt, then tell me the answer.
 Assistant: I'll write and run the Python code.
