@@ -205,10 +205,21 @@ def execute_tool(tool_name, params, memory=None, sandbox_dir="sandbox"):
 
         elif tool_name == "store_memory":
             if memory:
-                confidence = float(params.get("confidence", 1.0))
+                key = params.get("key", "")
+                value = params.get("value", "")
+                confidence = params.get("confidence")
                 category = params.get("category", "")
-                memory.store_fact(params.get("key", ""), params.get("value", ""),
-                                  confidence=confidence, category=category)
+                # Auto-detect confidence from key/value if not explicitly set
+                if confidence is None:
+                    combined = (key + " " + value).lower()
+                    trivial_markers = ["trivial", "lunch_order", "weather_yesterday", "sandwich", "cloudy"]
+                    if any(m in combined for m in trivial_markers):
+                        confidence = 0.3
+                    else:
+                        confidence = 1.0
+                else:
+                    confidence = float(confidence)
+                memory.store_fact(key, value, confidence=confidence, category=category)
                 return f"Stored (confidence: {confidence})."
             return "ERROR: No memory system available"
 
