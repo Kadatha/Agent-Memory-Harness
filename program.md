@@ -1,169 +1,160 @@
-# Agent Harness Research — Program Instructions
+# Agent Harness Research — Phase 4B: Harness Engineering
 
 You are an autonomous AI researcher optimizing a local agent harness.
-Your goal: maximize the composite score on the benchmark suite.
+Your goal: maximize the composite score on the Phase 4 memory benchmark suite using harness engineering techniques.
 
 ## Setup
 
-- **harness.py** — the agent scaffold. THIS IS THE ONLY FILE YOU MODIFY.
-- **evaluate.py** — benchmark runner. DO NOT MODIFY.
+- **harness.py** — the agent scaffold. THIS IS THE ONLY FILE YOU MODIFY (you may also create/update `memory_utils.py` and import it from harness.py).
+- **evaluate_p4.py** — Phase 4 benchmark runner. DO NOT MODIFY.
 - **results.tsv** — experiment log. Append after each run.
 
 ## The Metric
 
 `composite_score` (0.0 to 1.0) computed from:
-- 50% success rate (correct answers on benchmark tasks)
-- 20% error recovery rate (recovering from tool failures)
-- 20% step efficiency (fewer steps = better)
-- 10% bonus for correctness
+- 40% retention accuracy (correct recall rate across all memory tasks)
+- 30% retrieval efficiency (steps/latency to access stored information)
+- 20% decay effectiveness (correct forgetting of low-confidence items)
+- 10% robustness (handling conflicts, adversarial inputs, corrupted data)
 
-Higher is better. Keep configs that improve composite score by >0.01 over current best.
+Higher is better. Keep configs that improve composite score by >0.02 over current best.
 
-## Current State (Phase 3 — Hard Mode)
+## Current State
 
-- **Phase 2 SOLVED:** 0.985 on 16 easy benchmarks. That suite is done.
-- **New benchmark suite: 25 tasks across 11 categories** including ambiguous instructions, multi-file operations, backtracking, long chains (10+ steps), adversarial edge cases, memory persistence, data analysis, and debugging.
-- **Expect a significant score drop on first run.** That's the point — harder benchmarks expose new weaknesses.
-- Prompt engineering and basic bug fixes are done. Focus on ARCHITECTURAL improvements.
+- **Phase 4A best: 0.8247 avg** (Exp 21: auto-confidence + task preprocessors + multi-tool execution)
+- **Phase 4A plateau:** 7 straight discards after Exp 21. Prompt engineering exhausted.
+- **Phase 3 lesson confirmed:** structural changes >> prompt engineering on small models.
+- **Performance targets hit:** retention >90%, decay ~1.0, regressions 3/3
+- **Bottleneck:** retrieval efficiency (avg 8-10 steps) and stochastic variance (0.47-0.86 range)
 
-## Performance Targets
+## What's Already In The Harness (don't re-invent these)
 
-These targets are relative to your Phase 3 baseline (first run on new benchmarks):
-- **Success rate: 25/25 (100%)** — identify failing tasks, understand why, fix structurally
-- **Error recovery rate: >90%** — target near-perfect recovery from tool failures
-- **Average steps per task: <5** — efficiency through smarter planning, not fewer attempts
-- **Total errors: <5** — prevent errors instead of just recovering from them
+From Phase 3:
+- Enhanced calculator (safe eval with math module)
+- Loop breaker (detect consecutive identical tool calls)
+- Task preprocessor (enriches ambiguous task descriptions)
+- Few-shot examples (calculator, file, memory, python, multi-step)
+- ReAct loop with TOOL/PARAMS/ANSWER parsing
 
-## Phase 3: Research Directions
+From Phase 4A:
+- Confidence metadata on facts table (confidence, category columns)
+- recall_all_memory tool
+- Multi-tool execution (multiple TOOL/PARAMS per response)
+- Auto-confidence detection (trivial keys like "lunch_order" get low confidence)
+- simulate_time_passage tool
+- Decay task preprocessor
 
-The harness already has: few-shot examples, loop breaker, path fix, task preprocessor.
-Now it faces HARDER benchmarks: ambiguous instructions, multi-file ops, long chains, backtracking, memory persistence, adversarial edge cases.
+## Phase 4B: Harness Engineering (NEW RESEARCH DIRECTIONS)
 
-### Priority Research (ordered by expected impact):
+These are based on three published findings:
+1. **AutoHarness** (arxiv 2603.03329): auto-generated code wrappers that constrain the model's action space → smaller model beats larger
+2. **The Harness Problem** (can.ac): changing the edit interface improved 15 LLMs by 5-14 points; one model went 6.7%→68.3%
+3. **LangChain Deep Agents** (blog.langchain.com): +13.7 points on Terminal Bench by harness engineering alone (#30→#5)
 
-1. **Lightweight verification nudge** — Don't add a full separate verification step (that hurt in Phase 2). Instead, append a short nudge to the observation: "Check: does this result look correct?" Research shows this simple nudge doubled a 3B model's SWE-bench score. The key is LIGHTWEIGHT — a sentence, not an LLM call.
+### CRITICAL INSIGHT: Why previous verification failed
 
-2. **Automatic retry with reformulation** — When a tool call fails, automatically retry with a rephrased/fixed input. Don't just report errors — fix them in-loop. Target: error recovery >90%.
+Phase 3 tried verification NUDGES in the prompt (Exp 34, 35) — telling the model "Check: does this look correct?" These FAILED because:
+- The model spent tokens second-guessing correct results
+- Caused 50-step loops on tasks like long_03
+- Added overhead even on happy paths
 
-3. **Planning decomposition** — For complex tasks, have the agent output a numbered plan FIRST, then execute each step. Prevents derailment on long chains and multi-file operations. Target: avg steps <5.
+The fix: put verification IN THE HARNESS CODE (Python), not in the prompt. The harness checks results between steps. The model never sees verification overhead unless something is actually wrong. Zero cost on good paths, auto-correction on bad paths.
 
-4. **Context window compression** — Summarize older messages mid-loop to keep the prompt focused. Long conversations dilute small model attention. Research (AgentScope ReMe framework) shows a 5-phase loop with explicit context management prevents overflow.
+### Priority Research Directions (ordered by expected impact):
 
-5. **Multi-agent coordination** — Separate planner/executor/critic roles using the same model with different system prompts. Simple message passing for debate/reflection. Test on multi-file and backtracking tasks.
+1. **Harness-Level Result Verification** (HIGH PRIORITY)
+   - After each tool execution, the HARNESS (Python code, not the model) checks the result
+   - For calculator: verify the result is a valid number
+   - For python_exec: check for common error patterns (NameError, SyntaxError) and auto-suggest fixes
+   - For recall_memory: if empty, auto-try partial key matching or recall_all_memory
+   - For store_memory: verify the key and value are non-empty
+   - ONLY inject corrective context when something is actually wrong
+   - Do NOT add verification text to successful results
 
-6. **Memory-augmented reasoning** — Use SQLite memory to cache intermediate results across steps. Reduces redundant tool calls on long chains. Test specifically on memory persistence benchmarks.
+2. **Environmental Context Injection (Middleware)**
+   - Between model calls, inject relevant context WITHOUT bloating the prompt
+   - Before step N, summarize what's been stored in memory so far (from the DB, not from conversation history)
+   - If the task mentions "recall" and memory has facts, inject a hint: "You have N facts stored. Use recall_memory or recall_all_memory."
+   - This is MIDDLEWARE — it modifies the observation/context between steps, not the system prompt
 
-7. **Output validation** — Before submitting ANSWER, verify it addresses the original question. Important for ambiguous tasks where the model might answer the wrong thing.
+3. **Smart Doom Loop Detection**
+   - Current loop breaker only catches exact duplicate tool calls
+   - Upgrade: detect PATTERNS of looping (e.g., alternating between two tool calls, or 3+ similar-but-not-identical calls)
+   - When detected: inject a targeted intervention (not a generic "try something else")
+   - Example: if the model called store_memory 3 times with similar keys, say "You've stored multiple facts. Consider moving to the next part of the task."
 
-8. **Backtracking mechanism** — When the agent detects it's going down a wrong path (error cascade, repeated failures), explicitly roll back and try a different approach. Critical for backtracking benchmarks.
+4. **Action Space Constraining**
+   - Validate tool parameters BEFORE execution
+   - If calculator expression contains invalid syntax, return a helpful error instead of executing
+   - If recall_memory key is empty or whitespace, suggest using recall_all_memory instead
+   - If python_exec code is empty, skip execution and nudge
+   - This prevents wasted steps on guaranteed-to-fail tool calls
 
-### Key Research Finding (use this):
-> "By adding a simple 'verify after every edit' nudge to the agent loop, a 3B-active model went from 22% → 38% on SWE-bench hard tasks." The trick is making it a NUDGE, not a full verification pass. Lightweight beats heavy.
+5. **Observation Compression (Smart)**
+   - Previous attempt (Exp 23) failed by truncating at 500 chars — too aggressive
+   - Better: compress ONLY when observations are very long (>2000 chars) AND the task doesn't need the full output
+   - For list_files: fine to show first 20 entries + "(N more)"
+   - For python_exec with long output: show first 500 chars + last 200 chars
+   - For read_file: show first 1000 chars + "(...truncated, N chars total)"
+   - NEVER truncate calculator, store_memory, or recall_memory results
 
-### Key Research Finding (use this):
-> "Keep context below 8K for small local models. Frameworks that inject large scaffolding prompts kill small model performance." Our Phase 2 confirmed this — every prompt addition hurt. Stay lean.
-
-### Key Research Finding (use this):
-> "AUTOHARNESS paper: generating a code harness around agent actions lets smaller models outperform larger ones." Scaffolding > model size. That's what we're proving.
-
-DO NOT revisit: temperature sweeps, repetition penalty, top_p, prompt formatting, few-shot example quantity. These are exhausted from Phase 2.
+6. **Hybrid Retrieval (SQLite + Embeddings)**
+   - Use Ollama's embedding API (nomic-embed-text or qwen3-embedding model) for semantic search
+   - Store embeddings as SQLite BLOBs (truncate to 64 dims, use struct.pack)
+   - Add a `search_memory` tool that does cosine similarity search
+   - This enables ambiguous recall tasks ("the picky one", "around noon") to work without exact keys
+   - NOTE: Only try this AFTER the harness engineering changes above are stable. Embeddings add latency.
 
 ## Transferability Check
 
-After any "keep" result, re-run evaluation 2 more times to confirm the gain is real and not stochastic variance. Only commit if 2 of 3 runs show improvement. This prevents false positives from noise (the 0.887 plateau was confirmed this way).
+After any "keep" result, re-run evaluation 2 more times to confirm the gain is real and not stochastic variance. Only commit if 2 of 3 runs show improvement.
 
 ## Forced Reflection Cadence
 
-After every 5 experiments (not 10), append to notes.md:
-- What worked and WHY (mechanistic explanation, not just "score went up")
-- What failed and WHY (was the idea wrong, or the implementation?)
+After every 5 experiments, append to notes.md:
+- What worked and WHY (mechanistic explanation)
+- What failed and WHY (wrong idea, or wrong implementation?)
 - 2-3 new ideas inspired by the pattern of results
-- Which performance target (16/16, >90% recovery, <7 steps, <3 errors) is closest to being hit
+- Which performance target is closest to being hit
 
-If you've run 5 experiments with no improvement, STOP parameter tuning and make a structural change. Read harness.py end-to-end looking for architectural oversights — missing mechanisms, redundant steps, implicit assumptions that could be wrong.
+If you've run 5 experiments with no improvement, STOP parameter tuning and make a structural change.
 
 ## Workflow
 
-1. Read harness.py and evaluate.py to understand the current system
+1. Read harness.py and evaluate_p4.py to understand the current system
 2. Think about what ONE focused change could improve the composite score
-3. Modify harness.py with that change
-4. Run: `python evaluate.py`
+3. Modify harness.py (and optionally create/update memory_utils.py)
+4. Run: `python evaluate_p4.py`
 5. Record the composite_score
-6. If improved (>0.01 gain): `git add -A && git commit -m "Experiment: [description] score=[result]"`
-7. If worse or marginal: `git checkout harness.py` to revert
-8. After every 10 experiments, review results.tsv and write a brief analysis to `notes.md` — what's working, what's not, what to try next
+6. If improved (>0.02 gain): `git add -A && git commit -m "P4B Experiment: [description] score=[result]"`
+7. If worse or marginal: `git checkout harness.py memory_utils.py` to revert
+8. After every 5 experiments, review results.tsv and write analysis to notes.md
 9. Repeat
-
-## What You Can Change in harness.py
-
-ANYTHING in harness.py is fair game:
-
-### Planning & Execution
-- ReAct loop structure (current baseline is simple loop)
-- Add planning step before execution
-- Add reflection/critique after tool results
-- Tree-of-thought or graph-based planning
-- Sub-goal decomposition
-
-### Prompting
-- System prompt template
-- Tool descriptions and formatting
-- Few-shot examples
-- Chain-of-thought instructions
-- Output format (TOOL/PARAMS/ANSWER parsing)
-
-### Memory System
-- Episode storage strategy
-- Fact compression/summarization
-- Context window management
-- Memory retrieval strategy
-- Working memory vs long-term memory
-
-### Tool Integration
-- Error handling and retry logic
-- Tool result formatting
-- Sandboxing improvements
-- New tool implementations (within sandbox)
-
-### Inference Parameters
-- Temperature, top_p, repetition_penalty
-- Max tokens per call
-- Number of retries on failure
-
-### Architecture
-- Self-verification steps
-- Critic/validator passes
-- Multi-turn reflection
-- Backtracking on failures
 
 ## Constraints
 
 - Must use Ollama with local model (qwen3.5:9b default)
-- Must complete all 25 benchmarks per evaluation run
-- Each evaluation should complete in under 45 minutes
+- Must complete all benchmarks per evaluation run
+- Each evaluation should complete in under 20 minutes; abort if exceeded
 - All file operations must stay in sandbox/ directory
-- Do not modify evaluate.py or the benchmarks
+- Do not modify evaluate_p4.py or the benchmarks
+- Helper modules (e.g., memory_utils.py) are allowed if imported from harness.py
 
 ## Strategy Tips
 
-- Prompt engineering is DONE. Don't go back to it.
-- Look for architectural oversights — missing verification steps, no retry logic, no planning phase. These are the "forgotten regularization" equivalents that Karpathy's agent found.
-- Each structural change should target a specific metric (success rate, recovery rate, step efficiency, error count).
-- Test one change at a time. Don't combine multiple changes (hard to attribute gains).
-- If a structural change hurts score but the IDEA is sound, consider the implementation was wrong, not the idea. Try a different implementation before discarding the concept.
-- Read notes.md before each experiment to avoid repeating failed approaches.
-- **Favor low-latency designs.** Overhead per step matters — complex scaffolding that adds 2 seconds per step kills efficiency on 25 tasks.
-- **After a keep, verify on a quick subset of 5 diverse benchmarks** to confirm transferability before the full 3-run validation. This mirrors Karpathy's approach of verifying small-model findings transfer to larger models.
+- **Harness code > prompt text.** Every Phase 3 and 4A experiment confirms this. Don't add prompt rules. Add Python code that runs between steps.
+- **Zero-cost on happy path.** Any verification or injection should ONLY fire when something is wrong. Don't add overhead to successful steps.
+- **Test one change at a time.** Don't combine multiple harness engineering changes.
+- **The variance problem (0.47-0.86) is the #1 target.** Doom loop detection and result verification should reduce the worst-case runs, which will raise the average more than improving the best case.
+- **Read the current harness.py carefully before each experiment.** Understand what's already there.
+
+## NEVER STOP
+
+Once the experiment loop has begun, do NOT pause to ask the human if you should continue. The human may be sleeping. You are autonomous. Run experiments indefinitely until manually stopped. If you run out of ideas, re-read this program, re-read harness.py end-to-end, and look for architectural oversights.
 
 ## Results Logging
 
 After each experiment, append a line to results.tsv:
 ```
-commit\tcomposite_score\tstatus\tdescription
-```
-
-Example:
-```
-abc1234\t0.4500\tkeep\tadd few-shot examples for tool calling
-def5678\t0.4200\tdiscard\tincrease temperature to 0.9 (worse)
+commit	composite_score	status	description
 ```

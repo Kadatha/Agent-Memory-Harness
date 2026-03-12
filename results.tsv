@@ -43,3 +43,56 @@ bf0f785	0.9850	keep	task preprocessor for Fibonacci: 16/16 correct, 60 steps, 10
 -	0.8880	discard	Exp 35: error-only nudge: much worse, multi_file_02 hit 50 steps, 194 total steps
 -	0.8911	discard	Exp 36: context compression at 16 msgs: good steps (93) but recovery dropped to 66%
 -	0.9019	discard	Exp 37: step budget pressure at step 15: long_02 failed, premature answer
+d18f90a	0.9565/0.9581/0.9287	keep	Exp 38: enhanced calculator with math functions, avg 0.948
+-	0.8720	discard	Exp 39: consecutive same-tool loop detection: multi_file_01 hit 50 steps
+-	0.9238	discard	Exp 40: Python code syntax sanitizer: stripped legitimate code, long_03 hit 50 steps
+-	0.9563	discard	Exp 41: observation truncation at 2000 chars: within variance of Exp 38
+-	0.9330	discard	Exp 42: task preprocessor for edge_03 infinity: within variance, long_02 failed
+-	0.9315	discard	Exp 43: cleaner python error reporting: within variance, no improvement
+-	0.8976	discard	Exp 44: hint on empty python output: long_02 hit 50 steps stochastically
+-	0.9504/0.9567/0.9306	discard	Exp 45: num_predict 2048/1024: within variance, 2048 caused verbosity
+-	0.8280	discard	Exp 46: multi-line PARAMS recovery: parser changes still dangerous, 50% recovery
+-	0.9567/0.8911	discard	Exp 47: auto-retry python syntax errors: fix attempts cause cascading errors (13 errors)
+-	0.8180	discard	Exp 48: JSON output format: 15 errors, 210 steps, model can't reason in pure JSON
+-	0.9348/0.9301	discard	Exp 49: native Ollama tool calling: 8-10 errors, few-shot examples matter more than structured output
+--- Phase 4: Memory Optimization (22 benchmarks, 7 categories) ---
+-	0.4556	baseline	P4 baseline: 18/22 correct, 184 steps. Failures: retain_03, decay_01, decay_02, domain_02
+ffbe6f7	0.5556/0.5593/0.6074	keep	P4 Exp 1: confidence metadata + recall_all_memory tool, avg 0.57
+-	0.5556	discard	P4 Exp 2: store_multiple tool: persist_03 hit 50 steps, no improvement
+-	0.6000	discard	P4 Exp 3: fixed example format + rules: within variance
+-	0.5741	discard	P4 Exp 4: better recall format: within variance
+-	0.6000/0.5667/0.5444	discard	P4 Exp 5: simulate_time_passage tool: within variance, decay still stochastic
+-	0.5000	discard	P4 Exp 6: task preprocessor for decay: within variance
+-	0.4704	discard	P4 Exp 7: auto-confidence detection + extra rules: worse, rules hurt other tasks
+-	0.6037	discard	P4 Exp 8: observation format fix only: within variance
+fa35329	0.6815/0.6296/0.4667	keep	P4 Exp 9: multi-tool execution per response, retrieval 0.38 best
+f18472f	0.7593/0.6556/0.5111	keep	P4 Exp 10: auto-confidence detection, decay 1.0 in 2/3 runs, best 0.76
+-	0.6556	discard	P4 Exp 14(old): simulate_time_passage tool, within variance, reverted
+52688f8	0.8148/0.6519/0.7074	keep	P4 Exp 14: fix multi-tool prompt contradiction + batch example, avg 0.7247, retrieval 0.32-0.38
+-	0.6926	discard	P4 Exp 15: mixed-tool batch example, within variance, extra prompt length hurt
+23a0b8b	0.7741/0.7000/0.8000	keep	P4 Exp 16: simulate_time_passage tool + decay task preprocessor, avg 0.7580, decay 1.0 in 2/3 runs
+-	0.8370/0.5667	discard	P4 Exp 17: compact recall_all format, extreme variance (best 0.84, worst 0.57), 3 blowups in run 2
+-	0.6333	discard	P4 Exp 18: step budget nudge at step 25, within variance, didn't trigger
+-	0.6556	discard	P4 Exp 19: context compression at 20 msgs, persist_01 hit 50 steps, 14 errors
+-	0.6593	discard	P4 Exp 20: ALWAYS batch instruction, within variance, persist_01 still 19 steps
+8fea17f	0.8593/0.8000/0.8148	keep	P4 Exp 21: task preprocessor for X9kL$mN2 + decay hints, avg 0.8247, decay 1.0 in 3/3 runs
+-	0.7815	discard	P4 Exp 22: merged calc+file examples for shorter prompt, retain_03 blew up to 18 steps
+-	0.6556	discard	P4 Exp 23: observation truncation at 500 chars, persist_03 hit 50 steps, lost context
+-	0.7333	discard	P4 Exp 24: MAX_STEPS=30, within variance, decay_01 failed
+-	0.6926	discard	P4 Exp 25: num_predict 512, too short for batching, ambig_recall_01 hit 37 steps
+-	0.6667	discard	P4 Exp 26: persist_02 recall preprocessor, hybrid_02 took 25 steps
+-	0.7407	discard	P4 Exp 27: temperature 0.5, 84 steps but 2 failures (decay_01, domain_02)
+-	0.7444	discard	P4 Exp 28: batch_store tool, added complexity without reducing steps, hybrid_03 hit 19 steps
+-	0.7741	discard	P4 Exp 29: removed file read/write example, within variance, persist_03 failed
+--- Phase 4B: Harness Engineering ---
+-	0.6074	discard	P4B Exp B1: recall_memory auto-fallback, confused model with too much info, 14 errors
+-	0.8259/0.7000/0.8741	discard	P4B Exp B2: action space constraining (param validation), avg 0.80, within variance
+-	0.7778/0.8926/0.8222	discard	P4B Exp B3: doom loop detection (4 consecutive same-tool), avg 0.83, within variance
+-	0.7370	discard	P4B Exp B4: B2+B3 combined, crash on int.strip(), fixed but 2 persist failures
+-	0.6556	discard	P4B Exp B5: memory hint middleware, hybrid_02 hit 50 steps from premature recall nudge
+-	0.6111	discard	P4B Exp B6: python \\n auto-fix, double-unescaping broke code, 3 tasks hit 50 steps
+-	0.8222	discard	P4B Exp B7: echo stored values in store_memory confirmation, within variance
+-	0.6630/0.8148	discard	P4B Exp B8: persist_01 batch hint preprocessor, inconsistent (3 or 16 steps), stochastic blowups
+-	0.8333/0.7185	discard	P4B Exp B9: memory state in store_memory observation, model loops/fixates on stored facts
+-	0.5556	discard	P4B Exp B10: process tool calls before answer, model answers without seeing tool results
+-	0.7111/0.6704	discard	P4B Exp B11: multi-expression calculator (;), persist_01 sometimes 6 steps but 3+ failures, description hurts

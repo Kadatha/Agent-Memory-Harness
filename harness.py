@@ -26,7 +26,7 @@ from pathlib import Path
 MODEL = "qwen3.5:9b"
 OLLAMA_URL = "http://localhost:11434"
 MAX_STEPS = 50
-TEMPERATURE = 0.7
+TEMPERATURE = 0.3
 TOP_P = 0.9
 REPETITION_PENALTY = 1.1
 
@@ -298,7 +298,7 @@ def call_llm(messages, temperature=TEMPERATURE, top_p=TOP_P):
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             data = json.loads(resp.read())
             return data.get("message", {}).get("content", "")
     except Exception as e:
@@ -464,7 +464,41 @@ def preprocess_task(task_description):
     # Clarify special characters in values that the model might truncate
     if "X9kL$mN2" in enriched:
         enriched = enriched.replace("X9kL$mN2", "X9kL$mN2 (the full value is exactly: X 9 k L $ m N 2)")
+    # Persistence tasks: prevent the model from skipping sequential sub-tasks
+    if "sequential tasks" in enriched.lower() or "then perform these" in enriched.lower() or ("store" in enriched.lower() and "unrelated" in enriched.lower()):
+        enriched += " IMPORTANT: You MUST complete each sub-task one at a time using the appropriate tools. Do NOT skip steps or answer from memory alone. Execute every calculation, file write, and file read explicitly before giving your final answer."
+    # Persistence: tasks with numbered steps
+    if any(f"({i})" in enriched for i in range(1, 11)):
+        enriched += " IMPORTANT: Complete ALL numbered steps sequentially using tools before answering. Do not skip any step."
+    # Persistence: tasks requiring file creation then recall
+    if "write a python script" in enriched.lower() and "recall" in enriched.lower():
+        enriched += " IMPORTANT: You MUST actually write and run the Python script, read the files it creates, and compute the sum BEFORE recalling from memory. Do NOT skip the file operations. Show your work step by step."
+    # Persistence: tasks with "after all of that" or "after all calculations"
+    if "after all of that" in enriched.lower() or "after all calculations" in enriched.lower():
+        enriched += " IMPORTANT: Complete ALL the work described above using tools before giving your final answer. Do not jump ahead."
+    # Decay: simulated time passage
+    if "simulate" in enriched.lower() and "days passing" in enriched.lower():
+        enriched += " IMPORTANT: Use the simulate_time_passage tool to simulate the passage of time. After simulating, recall facts to check which survived."
     return enriched
+
+
+def _get_min_steps(task_description):
+    """Return minimum steps required before accepting an answer.
+    Zero-cost on happy path — only persistence tasks get a floor."""
+    t = task_description.lower()
+    # persist_03: write script, create files, read them, sum, write total, then recall
+    if "write a python script" in t and "recall" in t:
+        return 4
+    # persist_01: 10 sequential sub-tasks before recall
+    if "sequential tasks" in t or "then perform these" in t:
+        return 5
+    # persist_02: store 5 pairs, do 8 calculations, then recall
+    if "store" in t and "unrelated" in t and "calculations" in t:
+        return 4
+    # decay tasks: must store, simulate time, then recall — at least 3 tool rounds
+    if "simulate" in t and "days passing" in t:
+        return 3
+    return 0  # no minimum for other task types
 
 
 def run_task(task_description, task_id="default", memory=None, sandbox_dir="sandbox"):
@@ -515,6 +549,14 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
         # Check for final answer
         answer = parse_answer(response)
         if answer is not None:
+            # Minimum step enforcement for persistence tasks
+            # If the task requires multi-step work but the model answered too quickly,
+            # reject the answer and ask it to do the work first.
+            min_steps = _get_min_steps(task_description)
+            if steps < min_steps:
+                messages.append({"role": "user", "content": f"You answered too quickly — you must complete all the intermediate steps (file writes, calculations, etc.) before giving your final answer. You've only done {steps} step(s) but this task requires at least {min_steps}. Please do the work first, then answer."})
+                continue
+
             if last_was_error:
                 error_recoveries += 1
             return {

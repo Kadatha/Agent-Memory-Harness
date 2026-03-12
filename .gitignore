@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Sandbox directories (generated during benchmark runs)
+sandbox/
+
+# Temporary run output files
+run_35b_log.txt
+run_35b_output.txt
+run_35b_output2.txt
+run_35b_progress.txt
+run_35b_results.txt
+run_35b_results_run*.txt
+
+# Test files
+test_*.py
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.venv/
+env/
+venv/
