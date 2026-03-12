@@ -201,7 +201,8 @@ Patent pending. You are free to use, modify, and distribute this software under 
 
 ## Acknowledgments
 
+- [Andrej Karpathy](https://twitter.com/karpathy) — whose [autoresearch](https://github.com/karpathy/autoresearch) repo accelerated this work significantly
+- [Peter Steinberger](https://twitter.com/steipete) — creator of [OpenClaw](https://github.com/openclaw/openclaw), which made this entire project possible
 - Built with [Ollama](https://ollama.ai) for local inference
 - Models by [Alibaba Qwen](https://github.com/QwenLM) (Apache 2.0)
-- Agent orchestration via [OpenClaw](https://github.com/openclaw/openclaw)
 - Inspired by [AutoHarness](https://arxiv.org/abs/2603.03329) and the local LLM community
