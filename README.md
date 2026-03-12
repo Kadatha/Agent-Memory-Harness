@@ -80,7 +80,7 @@ Validated on consumer hardware:
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/agent-memory-harness.git
+git clone https://github.com/Kadatha/agent-memory-harness.git
 cd agent-memory-harness
 
 # Pull a model
