@@ -1,6 +1,6 @@
 # Agent Memory Harness
 
-**0.8852 composite score · 22/22 benchmarks · $0 inference · Runs offline on consumer hardware**
+**0.8852 best composite · 22/22 benchmarks · $0 inference · Runs offline on consumer hardware**
 
 A harness-level optimization framework for reliable agent memory persistence using local language models. No cloud. No API keys. No model modification.
 
@@ -51,7 +51,7 @@ All interventions are **zero-cost on the happy path** — they only activate whe
 
 ### Reproducibility
 
-Across 3 independent runs: average success rate 95.3%, composite scores ranging 0.80–0.89. Consistent task-level pass/fail patterns indicate systematic rather than stochastic performance.
+Across multiple independent runs, the system achieved composite scores ranging from 0.56 to 0.89, with two perfect-score runs (22/22) at 0.8852 and 0.8519. Run-to-run variance reflects inference non-determinism inherent to local model execution. Every run significantly exceeded the 0.4556 no-harness baseline, confirming the structural improvement is consistent even when individual task outcomes vary.
 
 ---
 

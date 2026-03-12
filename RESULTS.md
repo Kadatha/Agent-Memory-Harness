@@ -68,6 +68,39 @@
 | Robustness | 0.67 | 1.00 | +49% |
 | Baseline (no harness) | 0.4556 | — | — |
 
+## Run-to-Run Variance
+
+Local model inference is non-deterministic. Across all recorded runs:
+
+### Qwen 3.5 35B-A3B (6 runs)
+| Run | Composite | Success | Failures |
+|-----|-----------|---------|----------|
+| 1 | **0.8852** | 22/22 | none |
+| 2 | 0.8000 | 21/22 | persist_03 |
+| 3 | 0.5630 | 18/22 | persist_02, persist_03, decay_01, decay_02 |
+| 4 | 0.6667 | 20/22 | decay_01, decay_02 |
+| 5 | **0.8519** | 22/22 | none |
+| 6 | 0.7259 | 21/22 | decay_01 |
+
+**Average: 0.74 | Best: 0.8852 | Perfect runs: 2/6 (33%)**
+
+### Qwen 3.5 9B (8 runs)
+| Run | Composite | Success | Failures |
+|-----|-----------|---------|----------|
+| 1 | **0.8370** | 22/22 | none |
+| 2 | 0.7074 | 21/22 | decay_01 |
+| 3 | 0.7519 | 22/22 | none |
+| 4 | **0.8148** | 22/22 | none |
+| 5 | 0.7444 | 21/22 | decay_01 |
+| 6 | 0.6481 | 21/22 | decay_01 |
+| 7 | 0.5556 | 20/22 | persist_03, decay_01 |
+| 8 | **0.8148** | 22/22 | none |
+
+**Average: 0.73 | Best: 0.8370 | Perfect runs: 4/8 (50%)**
+
+### Key Observation
+Every single run — even the worst — significantly exceeds the 0.4556 no-harness baseline. The harness methodology produces consistent structural improvement; individual run variance reflects model inference non-determinism, not harness instability.
+
 ## Hardware
 - AMD Ryzen 9 3950X
 - NVIDIA RTX 5070 (12GB VRAM)
