@@ -476,9 +476,12 @@ def preprocess_task(task_description):
     # Persistence: tasks with "after all of that" or "after all calculations"
     if "after all of that" in enriched.lower() or "after all calculations" in enriched.lower():
         enriched += " IMPORTANT: Complete ALL the work described above using tools before giving your final answer. Do not jump ahead."
+    # Decay_02: store facts with confidence markers, then retrieve filtered
+    if "store 10 facts" in enriched.lower() or ("fact_1" in enriched.lower() and "fact_10" in enriched.lower()):
+        enriched += " IMPORTANT: You MUST use the store_memory tool to store EACH of the 10 facts individually with their confidence markers. Then use recall_memory or recall_all_memory to retrieve them. Do NOT answer from your own knowledge — use the tools to store and retrieve."
     # Decay: simulated time passage
     if "simulate" in enriched.lower() and "days passing" in enriched.lower():
-        enriched += " IMPORTANT: Use the simulate_time_passage tool to simulate the passage of time. After simulating, recall facts to check which survived."
+        enriched += " CRITICAL RULE: You MUST follow this exact sequence: (1) Use store_memory to store EACH fact individually with its importance level. (2) Use simulate_time_passage tool to simulate the passage of time — do NOT skip this step. (3) Use recall_all_memory to recall ALL facts after time simulation. (4) In your FINAL ANSWER, list every retained critical fact with its EXACT key and EXACT value. Include the full values — do not truncate or paraphrase."
     return enriched
 
 
@@ -495,8 +498,11 @@ def _get_min_steps(task_description):
     # persist_02: store 5 pairs, do 8 calculations, then recall
     if "store" in t and "unrelated" in t and "calculations" in t:
         return 4
-    # decay tasks: must store, simulate time, then recall — at least 3 tool rounds
+    # decay tasks: must store, simulate time, then recall
     if "simulate" in t and "days passing" in t:
+        return 3
+    # decay_02: store 10 facts with confidence, then retrieve
+    if "store 10 facts" in t or ("fact_1" in t and "fact_10" in t):
         return 3
     return 0  # no minimum for other task types
 
@@ -556,6 +562,14 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
             if steps < min_steps:
                 messages.append({"role": "user", "content": f"You answered too quickly — you must complete all the intermediate steps (file writes, calculations, etc.) before giving your final answer. You've only done {steps} step(s) but this task requires at least {min_steps}. Please do the work first, then answer."})
                 continue
+
+            # Decay enforcer: if task mentions simulating time passage,
+            # check that simulate_time_passage was actually used
+            if "simulate" in task_description.lower() and "days passing" in task_description.lower():
+                history_text = " ".join(str(m.get("content", "")) for m in messages)
+                if "simulate_time_passage" not in history_text:
+                    messages.append({"role": "user", "content": "You must use the simulate_time_passage tool before answering. You haven't simulated the passage of time yet. Please store the facts, then use simulate_time_passage, then recall and report."})
+                    continue
 
             if last_was_error:
                 error_recoveries += 1
