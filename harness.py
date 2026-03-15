@@ -17,7 +17,16 @@ import os
 import sqlite3
 import subprocess
 import time
+import struct
+import urllib.request
 from pathlib import Path
+
+# Numpy is optional - fallback to basic math if not available
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -57,7 +66,46 @@ class Memory:
                 updated REAL
             )
         """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fact_key TEXT,
+                embedding BLOB,
+                FOREIGN KEY (fact_key) REFERENCES facts (key)
+            )
+        """)
         self.conn.commit()
+
+    def _generate_embedding(self, text):
+        """Generate embedding for text using nomic-embed-text via Ollama."""
+        try:
+            payload = json.dumps({
+                "model": "nomic-embed-text",
+                "prompt": text
+            }).encode()
+            
+            req = urllib.request.Request(
+                f"{OLLAMA_URL}/api/embeddings",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode())
+                embedding = result.get("embedding", [])
+                # Truncate to 64 dimensions and pack as binary
+                if embedding:
+                    truncated = embedding[:64]
+                    # Pad with zeros if less than 64 dims
+                    while len(truncated) < 64:
+                        truncated.append(0.0)
+                    return struct.pack('64f', *truncated)
+                return None
+        except Exception as e:
+            # Fallback: if embedding generation fails, return None
+            print(f"Embedding generation failed: {e}")
+            return None
 
     def add_episode(self, task_id, step, role, content):
         self.conn.execute(
@@ -80,6 +128,19 @@ class Memory:
             "INSERT OR REPLACE INTO facts (key, value, confidence, category, updated) VALUES (?, ?, ?, ?, ?)",
             (key, value, confidence, category, time.time())
         )
+        
+        # Generate and store embedding for semantic search
+        combined_text = f"{key} {value}"
+        embedding = self._generate_embedding(combined_text)
+        if embedding:
+            # Remove existing embedding for this key first
+            self.conn.execute("DELETE FROM embeddings WHERE fact_key = ?", (key,))
+            # Insert new embedding
+            self.conn.execute(
+                "INSERT INTO embeddings (fact_key, embedding) VALUES (?, ?)",
+                (key, embedding)
+            )
+        
         self.conn.commit()
 
     def recall_fact(self, key):
@@ -109,11 +170,76 @@ class Memory:
             result[r[0]] = {"value": r[1], "confidence": r[2]}
         return result
 
+    def _cosine_similarity(self, a, b):
+        """Calculate cosine similarity between two embeddings."""
+        try:
+            if len(a) != len(b):
+                return 0.0
+            dot_product = sum(x * y for x, y in zip(a, b))
+            magnitude_a = sum(x * x for x in a) ** 0.5
+            magnitude_b = sum(x * x for x in b) ** 0.5
+            if magnitude_a == 0 or magnitude_b == 0:
+                return 0.0
+            return dot_product / (magnitude_a * magnitude_b)
+        except:
+            return 0.0
+
+    def search_memory(self, query, limit=5):
+        """Semantic search through stored facts using embeddings."""
+        query_embedding = self._generate_embedding(query)
+        if not query_embedding:
+            # Fallback to fuzzy search if embedding generation fails
+            return self._fuzzy_search_fallback(query, limit)
+        
+        # Unpack query embedding
+        query_vector = struct.unpack('64f', query_embedding)
+        
+        # Get all embeddings
+        cur = self.conn.execute("""
+            SELECT e.fact_key, e.embedding, f.value, f.confidence 
+            FROM embeddings e 
+            JOIN facts f ON e.fact_key = f.key
+        """)
+        
+        results = []
+        for row in cur.fetchall():
+            fact_key, embedding_blob, value, confidence = row
+            # Unpack stored embedding
+            stored_vector = struct.unpack('64f', embedding_blob)
+            # Calculate similarity
+            similarity = self._cosine_similarity(query_vector, stored_vector)
+            results.append((fact_key, value, confidence, similarity))
+        
+        # Sort by similarity descending and return top results
+        results.sort(key=lambda x: x[3], reverse=True)
+        return results[:limit]
+    
+    def _fuzzy_search_fallback(self, query, limit=5):
+        """Fallback fuzzy search when embeddings are not available."""
+        cur = self.conn.execute("""
+            SELECT key, value, confidence 
+            FROM facts 
+            WHERE key LIKE ? OR value LIKE ?
+            ORDER BY updated DESC
+        """, (f"%{query}%", f"%{query}%"))
+        
+        results = []
+        for row in cur.fetchall():
+            key, value, confidence = row
+            # Simple scoring based on query term presence
+            score = 0.5 if query.lower() in key.lower() else 0.3
+            results.append((key, value, confidence, score))
+        
+        return results[:limit]
+
     def decay_facts(self):
         """Delete low-confidence facts (< 0.5). Returns list of deleted keys."""
         cur = self.conn.execute("SELECT key FROM facts WHERE confidence < 0.5")
         keys = [r[0] for r in cur.fetchall()]
         if keys:
+            # Delete associated embeddings first
+            self.conn.execute("DELETE FROM embeddings WHERE fact_key IN (SELECT key FROM facts WHERE confidence < 0.5)")
+            # Delete facts
             self.conn.execute("DELETE FROM facts WHERE confidence < 0.5")
             self.conn.commit()
         return keys
@@ -162,6 +288,10 @@ TOOLS = {
     "recall_all_memory": {
         "description": "Recall ALL stored facts from memory. Optional: min_confidence (0.0-1.0) to filter by confidence level.",
         "parameters": {"min_confidence": "number (optional)"}
+    },
+    "search_memory": {
+        "description": "Semantic search through stored facts using natural language queries. Returns ranked results with similarity scores.",
+        "parameters": {"query": "string", "limit": "number (optional, default 5)"}
     },
     "simulate_time_passage": {
         "description": "Simulate the passage of time. Low-confidence facts will be forgotten (decayed). Use after storing facts with varying confidence.",
@@ -251,6 +381,27 @@ def execute_tool(tool_name, params, memory=None, sandbox_dir="sandbox"):
                 if facts:
                     return json.dumps(facts, indent=2)
                 return "No facts stored in memory."
+            return "ERROR: No memory system available"
+
+        elif tool_name == "search_memory":
+            if memory:
+                query = params.get("query", "")
+                limit = params.get("limit", 5)
+                if isinstance(limit, str):
+                    limit = int(limit)
+                
+                results = memory.search_memory(query, limit)
+                if results:
+                    formatted_results = []
+                    for key, value, confidence, similarity in results:
+                        formatted_results.append({
+                            "key": key,
+                            "value": value, 
+                            "confidence": confidence,
+                            "similarity": round(similarity, 3)
+                        })
+                    return json.dumps(formatted_results, indent=2)
+                return f"No results found for query: '{query}'"
             return "ERROR: No memory system available"
 
         elif tool_name == "simulate_time_passage":
@@ -596,6 +747,21 @@ def run_task(task_description, task_id="default", memory=None, sandbox_dir="sand
             observation = f"OBSERVATION: " + ("\n".join(observations) if len(observations) > 1 else observations[0])
             messages.append({"role": "user", "content": observation})
             memory.add_episode(task_id, step, "observation", observation)
+            
+            # Post-tool reflection nudge (Andrew's suggestion)
+            # Encourage reflection after significant tool results or error recovery
+            should_reflect = (
+                len(observations) > 1 or  # Multiple tool calls in one step
+                any(obs for obs in observations if "ERROR:" in obs) or  # Any errors occurred
+                (last_was_error and not is_error) or  # Just recovered from error
+                len(observation) > 200 or  # Large/complex result
+                any(tool_name in ['write', 'read', 'search', 'calc'] for tool_name, _ in tool_calls)  # Important tools
+            )
+            
+            if should_reflect and steps > 1:  # Don't reflect on very first step
+                reflection_nudge = "What does this result tell you? How does it help you complete the task?"
+                messages.append({"role": "user", "content": reflection_nudge})
+                memory.add_episode(task_id, step, "reflection_nudge", reflection_nudge)
         else:
             # No tool call and no answer — nudge the agent
             messages.append({"role": "user", "content": "Continue working on the task. Use a tool or provide your ANSWER."})

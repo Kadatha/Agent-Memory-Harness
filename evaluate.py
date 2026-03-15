@@ -201,6 +201,43 @@ BENCHMARKS = [
         "expected": "5",
         "check": "numeric",
     },
+
+    # ===== SEMANTIC RETRIEVAL =====
+    {
+        "id": "semantic_01",
+        "category": "semantic_retrieval",
+        "task": "Store this information in memory: 'John Smith works as a software engineer at TechCorp and enjoys hiking on weekends'. Later, without using the exact words, find information about someone who codes professionally and likes outdoor activities.",
+        "expected": "John Smith",
+        "check": "contains",
+    },
+    {
+        "id": "semantic_02", 
+        "category": "semantic_retrieval",
+        "task": "Store these facts: 'The capital of France is Paris', 'Tokyo is Japan's largest city', 'London is in England'. Then find information about a European metropolitan area without using the words 'capital', 'France', or 'Paris'.",
+        "expected": "London",
+        "check": "contains",
+    },
+    {
+        "id": "semantic_03",
+        "category": "semantic_retrieval", 
+        "task": "Remember: 'Project Alpha deadline is March 15, 2024', 'Beta release scheduled for April 30', 'Gamma testing begins in May'. Later, find information about what happens in the spring of 2024 without mentioning specific project names.",
+        "expected": "April 30",
+        "check": "contains",
+    },
+    {
+        "id": "semantic_04",
+        "category": "semantic_retrieval",
+        "task": "Store: 'The red car costs $25,000', 'Blue vehicle priced at $30,000', 'Green automobile is $22,000'. Then find the least expensive transportation option without using color words or 'cost'.",
+        "expected": "22,000",
+        "check": "contains",
+    },
+    {
+        "id": "semantic_05",
+        "category": "semantic_retrieval",
+        "task": "Remember these relationships: 'Alice reports to Bob', 'Bob reports to Carol', 'Dave reports to Alice'. Create a hierarchy diagram, then find who is at the top of the management structure without directly stating their name in your query.",
+        "expected": "Carol",
+        "check": "contains",
+    },
 ]
 
 # ---------------------------------------------------------------------------
