@@ -20,8 +20,22 @@ A Python harness that sits between a language model and its tools, intercepting 
 | **Multi-Tool Execution** | Queues parallel tool calls and merges results |
 | **Minimum Step Enforcement** | Prevents premature answers on multi-step tasks |
 | **Task Preprocessing** | Auto-enriches prompts with category-specific instructions |
+| **Semantic Retrieval** | Natural language memory search via nomic-embed-text embeddings |
+| **Post-Tool Reflection** | Triggers reasoning pause after complex or multi-tool executions |
 
 All interventions are **zero-cost on the happy path** — they only activate when something goes wrong.
+
+### Semantic Memory Search
+
+The harness now supports natural language memory queries via `search_memory`, powered by [nomic-embed-text](https://ollama.ai/library/nomic-embed-text) embeddings stored alongside facts in SQLite:
+
+```python
+# Agent can search memory by meaning, not just exact keys
+result = search_memory("What was the weather like?")
+# Finds "sunny and warm" even though query says "weather" (0.894 similarity)
+```
+
+Embeddings are auto-generated on `store_fact`, cleaned up on `decay_facts`, and searched via cosine similarity — all local, all free.
 
 ---
 
@@ -121,7 +135,7 @@ print(result["answer"])  # sk_live_abc123
 
 ## Benchmark Suite
 
-22 benchmarks across 8 categories:
+27 benchmarks across 9 categories:
 
 | Category | Count | Tests |
 |----------|-------|-------|
@@ -133,6 +147,7 @@ print(result["answer"])  # sk_live_abc123
 | Decay | 2 | Critical vs. trivial fact retention over time |
 | Adversarial | 3 | Prompt injection, contradictory updates |
 | Domain-Specific | 2 | Steel pricing, margin calculations |
+| Semantic Retrieval | 5 | Synonym matching, geographic reasoning, temporal inference |
 
 ---
 
